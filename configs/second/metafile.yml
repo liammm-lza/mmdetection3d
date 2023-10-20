@@ -44,7 +44,7 @@ Models:
 
   - Name: second_hv_secfpn_sbn-all_16xb2-2x_waymoD5-3d-3class
     In Collection: SECOND
-    Config: configs/second/second_hv_secfpn_sbn-all_16xb2-2x_waymoD5-3d-3class.py
+    Config: configs/second/syndet_rotate3d_synapse.py
     Metadata:
       Training Data: Waymo
       Training Memory (GB): 8.12

@@ -5,6 +5,7 @@ from typing import List, Optional, Union
 import mmcv
 import mmengine
 import numpy as np
+import tifffile as tifffile
 from mmcv.transforms import LoadImageFromFile
 from mmcv.transforms.base import BaseTransform
 from mmdet.datasets.transforms import LoadAnnotations
@@ -13,6 +14,46 @@ from mmengine.fileio import get
 from mmdet3d.registry import TRANSFORMS
 from mmdet3d.structures.bbox_3d import get_box_type
 from mmdet3d.structures.points import BasePoints, get_points_type
+
+
+@TRANSFORMS.register_module()
+class LoadVolumeFromFile(LoadImageFromFile):
+    """Load an image from ``results['img']``.
+    Similar with :obj:`LoadImageFromFile`, but the image has been loaded as
+    :obj:`np.ndarray` in ``results['img']``. Can be used when loading image
+    from webcam.
+    Required Keys:
+    - img
+    Modified Keys:
+    - img
+    - img_path
+    - img_shape
+    - ori_shape
+    Args:
+        to_float32 (bool): Whether to convert the loaded image to a float32
+            numpy array. If set to False, the loaded image is an uint8 array.
+            Defaults to False.
+    """
+
+    def transform(self, results: dict) -> dict:
+        """Transform function to add image meta information.
+
+        Args:
+            results (dict): Result dict with Webcam read image in
+                ``results['img']``.
+        Returns:
+            dict: The dict contains loaded image and meta information.
+        """
+
+        vol = results['volume']
+        if self.to_float32:
+            vol = vol.astype(np.float32)
+
+        results['img_path'] = results['filename']
+        results['volume'] = vol
+        results['img_shape'] = vol.shape[:2]
+        results['ori_shape'] = vol.shape[:2]
+        return results
 
 
 @TRANSFORMS.register_module()
@@ -118,7 +159,7 @@ class LoadMultiViewImageFromFiles(BaseTransform):
                         select_results += results[key][choice *
                                                        self.num_views:(choice +
                                                                        1) *
-                                                       self.num_views]
+                                                                      self.num_views]
                     results[key] = select_results
             for key in ['ego2global']:
                 if key in results:
@@ -135,13 +176,13 @@ class LoadMultiViewImageFromFiles(BaseTransform):
                         pad_prev_ego2global = np.eye(4)
                         prev_ego2global = results['ego2global'][choice_idx]
                         pad_prev_ego2global[:prev_ego2global.
-                                            shape[0], :prev_ego2global.
-                                            shape[1]] = prev_ego2global
+                            shape[0], :prev_ego2global.
+                            shape[1]] = prev_ego2global
                         pad_cur_ego2global = np.eye(4)
                         cur_ego2global = results['ego2global'][0]
                         pad_cur_ego2global[:cur_ego2global.
-                                           shape[0], :cur_ego2global.
-                                           shape[1]] = cur_ego2global
+                            shape[0], :cur_ego2global.
+                            shape[1]] = cur_ego2global
                         cur2prev = np.linalg.inv(pad_prev_ego2global).dot(
                             pad_cur_ego2global)
                         for result_idx in range(choice_idx * self.num_views,
@@ -441,7 +482,7 @@ class LoadPointsFromMultiSweeps(BaseTransform):
                 sweep_ts = sweep['timestamp']
                 lidar2sensor = np.array(sweep['lidar_points']['lidar2sensor'])
                 points_sweep[:, :
-                             3] = points_sweep[:, :3] @ lidar2sensor[:3, :3]
+                                3] = points_sweep[:, :3] @ lidar2sensor[:3, :3]
                 points_sweep[:, :3] -= lidar2sensor[:3, 3]
                 points_sweep[:, 4] = ts - sweep_ts
                 points_sweep = points.new_point(points_sweep)
@@ -535,7 +576,7 @@ class NormalizePointsColor(BaseTransform):
         points = input_dict['points']
         assert points.attribute_dims is not None and \
                'color' in points.attribute_dims.keys(), \
-               'Expect points have color attribute'
+            'Expect points have color attribute'
         if self.color_mean is not None:
             points.color = points.color - \
                            points.color.new_tensor(self.color_mean)
@@ -841,6 +882,7 @@ class LoadAnnotations3D(LoadAnnotations):
                  with_seg: bool = False,
                  with_bbox_depth: bool = False,
                  with_panoptic_3d: bool = False,
+                 with_vec_3d: bool = False,
                  poly2mask: bool = True,
                  seg_3d_dtype: str = 'np.int64',
                  seg_offset: int = None,
@@ -860,6 +902,7 @@ class LoadAnnotations3D(LoadAnnotations):
         self.with_mask_3d = with_mask_3d
         self.with_seg_3d = with_seg_3d
         self.with_panoptic_3d = with_panoptic_3d
+        self.with_vec_3d = with_vec_3d
         self.seg_3d_dtype = eval(seg_3d_dtype)
         self.seg_offset = seg_offset
         self.dataset_type = dataset_type
@@ -874,7 +917,6 @@ class LoadAnnotations3D(LoadAnnotations):
         Returns:
             dict: The dict containing loaded 3D bounding box annotations.
         """
-
         results['gt_bboxes_3d'] = results['ann_info']['gt_bboxes_3d']
         return results
 
@@ -1043,6 +1085,11 @@ class LoadAnnotations3D(LoadAnnotations):
         """
         results['gt_bboxes_labels'] = results['ann_info']['gt_bboxes_labels']
 
+    # def _load_vec_3d(self, results: dict) -> dict:
+    #     results['gt_bboxes'] = results['ann_info']['gt_bboxes_3d']
+    #     results['gt_bboxes_labels'] = results['ann_info']['gt_labels_3d']
+    #     return results
+
     def transform(self, results: dict) -> dict:
         """Function to load multiple types annotations.
 
@@ -1068,6 +1115,8 @@ class LoadAnnotations3D(LoadAnnotations):
             results = self._load_masks_3d(results)
         if self.with_seg_3d:
             results = self._load_semantic_seg_3d(results)
+        if self.with_vec_3d:
+            results = self._load_vec_3d(results)
         return results
 
     def __repr__(self) -> str:
@@ -1084,6 +1133,7 @@ class LoadAnnotations3D(LoadAnnotations):
         repr_str += f'{indent_str}with_label={self.with_label}, '
         repr_str += f'{indent_str}with_mask={self.with_mask}, '
         repr_str += f'{indent_str}with_seg={self.with_seg}, '
+        repr_str += f'{indent_str}with_vec_3d={self.with_vec_3d}, '
         repr_str += f'{indent_str}with_bbox_depth={self.with_bbox_depth}, '
         repr_str += f'{indent_str}poly2mask={self.poly2mask})'
         repr_str += f'{indent_str}seg_offset={self.seg_offset})'
@@ -1253,7 +1303,7 @@ class MultiModalityDet3DInferencerLoader(BaseTransform):
             information.
         """
         assert 'points' in single_input and 'img' in single_input and \
-            'calib' in single_input, "key 'points', 'img' and 'calib' must be "
+               'calib' in single_input, "key 'points', 'img' and 'calib' must be "
         f'in input dict, but got {single_input}'
         if isinstance(single_input['points'], str):
             inputs = dict(

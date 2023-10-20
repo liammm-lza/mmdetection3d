@@ -21,12 +21,13 @@ from .smoke_mono3d import SMOKEMono3D
 from .ssd3dnet import SSD3DNet
 from .votenet import VoteNet
 from .voxelnet import VoxelNet
-
+from .syndet import Syndet
+from .fast_rcnn_3d import FasterRCNN3D
 __all__ = [
     'Base3DDetector', 'VoxelNet', 'DynamicVoxelNet', 'MVXTwoStageDetector',
     'DynamicMVXFasterRCNN', 'MVXFasterRCNN', 'PartA2', 'VoteNet', 'H3DNet',
     'CenterPoint', 'SSD3DNet', 'ImVoteNet', 'SingleStageMono3DDetector',
     'FCOSMono3D', 'ImVoxelNet', 'GroupFree3DNet', 'PointRCNN', 'SMOKEMono3D',
     'SASSD', 'MinkSingleStage3DDetector', 'MultiViewDfM', 'DfM',
-    'PointVoxelRCNN'
+    'PointVoxelRCNN', 'Syndet', 'FasterRCNN3D'
 ]
